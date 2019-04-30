@@ -8,11 +8,14 @@
 </head>
 <body>
     <input type="file" id="file" name="file" accept=""  onchange="loadFile()"></input>
-    <div style="position: fixed; left: 0; top: 10%; width: 100%; height: 90%; background-color: red">
+    <div style="position: fixed; left: 0; top: 10%; width: 50%; height: 90%; background-color: red">
         <canvas id="canvas" width="100%" height="100%"></canvas>
     </div>
-
-    <script src="gameboy.js"></script>
+    <div id="memory-div" style="position: fixed; overflow-y: scroll; left: 50%; top: 10%; width: 50%; height: 90%; color: white; background-color: black">
+        <p> MEMORY: </p>
+    </div>
+    <script src="GPU.js"></script>
+    <script src="CPU.js"></script>
     <script src="main.js"></script>
     <script src="keyboard.js"></script>
 </body>

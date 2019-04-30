@@ -1,3 +1,22 @@
+const memoryHTML = document.getElementById("memory-div");
+// class MemoryBus{
+//     constructor(){
+//        this.memory = new Uint8Array(0xFFFF);
+//        this.GPU = new GPU(); 
+//     }
+
+// }
+
+updateDiv = (memory) => {
+    let strMemory = "";
+    memory.forEach((byte, index) => {
+        strMemory += byte.toString(16).toUpperCase() + "----";
+        if(index % 10 == 0){
+            memoryHTML.innerHTML += `<p>${strMemory}</p>`;
+            strMemory = "";
+        }
+    })
+}
 
 /**
  * Most of the registers are set by default with a non-real size.
@@ -37,9 +56,9 @@ class Gameboy {
         //  [FF00-FF7F] I/O: Controls input and outpus
         //  [FF80-FFFE] High RAM: Fastest RAM. 
         //  [FFFF] System interruptions.
-        this.memory = new Uint8Array(1024 * 64);
+        this.memory = new Uint8Array(0xFFFF);
 
-        this.display = new Uint8Array(160 * 144);
+        this.gpu = new GPU();
     }
 
 
@@ -55,8 +74,26 @@ class Gameboy {
                 this.name += String.fromCharCode(this.memory[index]);
             }
         }
+        updateDiv(this.memory);
         console.log(this.name);
         console.log("Memory: ", this.memory);
+    }
+
+
+    /**
+     * Returns uint16 with values from registers of B and C
+     */
+    getBC() {
+        return (this.B << 8) | this.C;
+    }
+
+    /**
+     * Sets values of B and C to @params uint16 value
+     * @param value uint16 
+     */
+    setBC(value) {
+        this.B = (  value & 0xFF00 ) >> 8;
+        this.C = value & 0x00FF;
     }
 
     //////////////////////
@@ -122,7 +159,7 @@ class Gameboy {
         const opcode = this.memory[this.pc];
         this.pc++;
         const hexOpcode = opcode.toString(16);
-        console.log("OPCODE:", hexOpcode);
+        //console.log("OPCODE:", hexOpcode);
 
         switch (opcode) {
             case 0x00: {

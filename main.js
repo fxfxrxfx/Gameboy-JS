@@ -12,6 +12,7 @@ function loadFile(){
         const arrayBuffer = reader.result;
         const bArray = new Uint8Array(arrayBuffer);
         gameboy.loadProgram(bArray);
+        
         setInterval(start, 1000);
     }
     reader.readAsArrayBuffer(file);
@@ -42,14 +43,14 @@ function redrawCanvas(){
         ctx.fillRect(x * PIXEL_WIDTH, y * PIXEL_HEIGHT, PIXEL_WIDTH, PIXEL_HEIGHT);
     }
 
-    const { display } = gameboy;
-    display.forEach( (pixel, index) => {
-        const coor = {
-            x: index % 160,
-            y: parseInt(index / 160) 
-        };
-        drawPixel(coor, ( pixel == 1 ) ? "green" : "black");
-    })
+    //const { display } = gameboy;
+    // display.forEach( (pixel, index) => {
+    //     const coor = {
+    //         x: index % 160,
+    //         y: parseInt(index / 160) 
+    //     };
+    //     drawPixel(coor, ( pixel == 1 ) ? "green" : "black");
+    // })
 
 }
 
