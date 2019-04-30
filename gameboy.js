@@ -48,6 +48,14 @@ class Gameboy {
             const instruction = data[i];
             this.memory[i] = instruction
         }
+    
+        this.name = "";
+        for (var index = 0x134; index < 0x13F; index++) {
+            if (this.memory[index] > 0) {
+                this.name += String.fromCharCode(this.memory[index]);
+            }
+        }
+        console.log(this.name);
         console.log("Memory: ", this.memory);
     }
 
