@@ -1,29 +1,10 @@
-const memoryHTML = document.getElementById("memory-div");
-// class MemoryBus{
-//     constructor(){
-//        this.memory = new Uint8Array(0xFFFF);
-//        this.GPU = new GPU(); 
-//     }
-
-// }
-
-updateDiv = (memory) => {
-    let strMemory = "";
-    memory.forEach((byte, index) => {
-        strMemory += byte.toString(16).toUpperCase() + "----";
-        if(index % 10 == 0){
-            memoryHTML.innerHTML += `<p>${strMemory}</p>`;
-            strMemory = "";
-        }
-    })
-}
 
 /**
  * Most of the registers are set by default with a non-real size.
  * Most of the registers should be 8bit variables, but that's something that's out of my hands
  * using Javascript. So...
  */
-class Gameboy {
+class CPU {
     constructor(){
         //8 bits register. Accumulator. The only one that can do arithmetic operations
         this.A = 0x00;
@@ -37,65 +18,161 @@ class Gameboy {
         this.E = 0x00;
         this.L = 0x00;
         //16 bit. Stack Pointer. Indicates the address in memory of the element at the top of the stack.
-        this.stackPointer = 0xFFEE;
+        this.SP = 0x00;
         //16 bit. Program Counter. Indicates the address in memory to exec.
-        this.pc = 0x0100;
-        //Gameboy has an address space of 64k. Divided id:
-        //[0000-7FFF] ROM: Game loaded. Divided in:
-        //  ROM0: Static. Redirects to game base.
-        //  ROM1: Has memory banks, that can be exchange using "Memory banking"
-        //  [0000-00FF] BOOT ROM / BIOS: Cleans RAM, writes Nintendo logo, plays "GAMEBOY" sound.
-        //  [0100-014F] Header: Points to header with metadata of the game (Game, reqs, etc).
-        //[8000-9FFF] Video RAM: Sprites and backgrounds.
-        //[A000-BFFF] External RAM: Optional. Points to RAM's chip from the game.
-        //[C000-DFFF] Work RAM: 8k. Internal RAM of the console. Can be read and written.
-        //[E000-FDFF] "Mirror" zone: These addresses points to Work RAM. It's not convenient their use.
-        //[FE00-FFFF] Have some subdivs:
-        //  [FE00-FE9F] OAM (Object Attribute Memory) RAM: Saves properties of sprites (Position, transparency, etc).
-        //  [FEA0-FEFF] Reserved. Not used for devs.
-        //  [FF00-FF7F] I/O: Controls input and outpus
-        //  [FF80-FFFE] High RAM: Fastest RAM. 
-        //  [FFFF] System interruptions.
-        this.memory = new Uint8Array(0xFFFF);
+        this.pc = 0x0;//0x0100;
+        
+        this.initRegisters();
 
-        this.gpu = new GPU();
+        this.memory = new MemoryBus();
+
+        //Clock registers
+        this.m = 0; 
+        this.t = 0;
+
+        //Clock
+        this.clock = {
+            m: 0,
+            t:0
+        };
+        this.initOpcodes();
     }
 
+    initRegisters(){
+        this.setRegister16("AF", 0x0001);
+        this.setRegister16("BC", 0x0013);
+        this.setRegister16("DE", 0x00D8);
+        this.setRegister16("HL", 0x014D);
+        //this.setRegister8("F", 0xB0);
+    }
 
-    loadProgram(data) {
-        for (let i = 0x0000; i < 0x7FFF; i++){
-            const instruction = data[i];
-            this.memory[i] = instruction
+    debugRegisters(){
+        console.log("AF:", this.getRegister16("AF").toString(16));
+        console.log("BC:", this.getRegister16("BC").toString(16));
+        console.log("DE:", this.getRegister16("DE").toString(16));
+        console.log("HL:", this.getRegister16("HL").toString(16));
+        console.log("SP:", this.SP.toString(16));
+        console.log("F:", this.getRegister8("F").toString(2));
+        console.log("PC:", this.pc);
+        
+    }
+
+    initOpcodes(){
+        //////////////////////
+        //  INSTRUCTIONS    //
+        //////////////////////
+        const LD_16_n_nn = args => {
+            const n = args[1];
+            const nn = args[0];
+            this.setRegister16(n, nn);
         }
-    
-        this.name = "";
-        for (var index = 0x134; index < 0x13F; index++) {
-            if (this.memory[index] > 0) {
-                this.name += String.fromCharCode(this.memory[index]);
+
+        const LDD_8_HL_A = args => {
+            this.setRegister8("A", this.memory.readByte(this.getRegister16("HL")));
+            this.setRegister16("HL", this.getRegister16("HL") - 1);
+        }
+
+        const XOR_A_n = args => {
+            const n = this[args[0]];
+            this.A ^= n;
+
+            if(this.A == 0){
+                console.log("Setting F Zero flag")
+                this.setZeroFlag(this.A);
             }
         }
-        updateDiv(this.memory);
-        console.log(this.name);
-        console.log("Memory: ", this.memory);
+
+        this.opcodes = {
+            //0x OPCODES
+            0x00: () => { throw "NOT DONE STILL..."  },
+            0x04: () => {   this.increase("B");     },
+            0x08: () => {   this.memory.writeWord(0xA16, this.sp); this.pc += 2; this.m = 3; this.t = 20; },
+            
+            //1x OPCDES
+            0x13: () => {   this.increaseDE()    },
+            
+            //2x OPCODES
+            0x20: () => {   let i = this.memory.readByte(this.pc); if ( i > 127 ) i = -((~i + 1) & 255); this.pc++; this.m = 2; this.t = 8; if((this.f & 0x80) == 0x00) { this.pc += i; this.m++; this.t+=4;   }    },
+        
+            0x21: {
+                fn: LD_16_n_nn,
+                cycles: 12,
+                register: "HL",
+                flags: [],
+                inmediate16: true,
+                pc: 3
+            },
+            0x23: () => {   this.increaseHL()   },
+
+            
+            //0x3x OPCODES
+            0x31: {   
+                fn: LD_16_n_nn,
+                cycles: 12,
+                register: "SP",
+                flags: [],
+                inmediate16: true,
+                pc: 3
+            },
+
+            0x32: {
+                fn: LDD_8_HL_A,
+                cycles: 8,
+                flags: [],
+                pc: 1
+            },
+
+            //Ax OPCODES
+            0xAF: {
+                fn: XOR_A_n,
+                cycles: 4,
+                pc: 1,
+                register: 'A',
+                flags: ['Z']
+            },
+
+            //Fx OPCODES
+            0xFF: () => {   this.sp -= 2; this.memory.writeWord(this.sp, this.pc); this.pc = 0x38; this.m = 1; this.t = 16}
+        };
+        this.commands = {
+
+        }
+    }
+
+    //TODO: Review setHalCarry
+    increase(reg){  this[reg]++; this.pc += 2; this.setZeroFlag(this[reg]); this.setSubstractFlag(false); this.setHalfCarryFlag(this[reg] > 255); this[reg] &= 0xFF; this.m }
+
+    //TODO: Review this pc += 2
+    increaseDE(){   this.setDE(this.getDE() + 1); this.m = 1; this.pc += 2; this.t = 8  };
+    increaseHL(){   this.setHL(this.getHL() + 1); this.m = 1; this.pc += 2; this.t = 8  }
+
+    getRegister8(reg){
+        return this[reg];
+    }
+
+    getRegister16(reg){
+        return (this[reg.charAt(0)] << 8) | this[reg.charAt(1)];
+    }
+
+    setRegister8(reg, value){
+        this[reg] = value;
+    }
+
+    setRegister16(reg, value){
+        console.log("ARGS:", reg, value);
+        if(reg == "SP") {
+            this.SP = value;
+            return;
+        }
+        this.setRegister8(reg.charAt(0), (value >> 8) & 0xFF);
+        this.setRegister8(reg.charAt(1), value & 0xFF);
     }
 
 
-    /**
-     * Returns uint16 with values from registers of B and C
-     */
-    getBC() {
-        return (this.B << 8) | this.C;
-    }
 
-    /**
-     * Sets values of B and C to @params uint16 value
-     * @param value uint16 
-     */
-    setBC(value) {
-        this.B = (  value & 0xFF00 ) >> 8;
-        this.C = value & 0x00FF;
-    }
 
+
+    
     //////////////////////
     //  FLAG REGISTER   //
     //////////////////////
@@ -110,7 +187,8 @@ class Gameboy {
      * instruction.
      * @param bool 
      */
-    setZeroFlag(bool){
+    setZeroFlag(value){
+        const bool = value == 0;
         const bit = bool ? 1 : 0;
         this.F |= bit << 7;
     }
@@ -152,41 +230,53 @@ class Gameboy {
         this.F | value;
     }
 
+
+    //////////////////////  
+    //  INSTRUCTIONS    //
+    //////////////////////
+    
+    /**
+     * Add to HL
+     * Value is added to the HL register
+     */
+    ADDHL(value) {
+        const newHL = this.getHL() + value;
+        this.setHL(newHL);
+    }
+
+    /**
+     * Add with carry
+     * The value of the carry flag is also added to the number
+     * @param {*} value 
+     */
+    ADC(value){
+
+    }
+
     run(){
         //To get opcode we get the memory at the program counter (PC)
-        //We carry those bytes 8 bits to left ( << operator )
-        //Then we add the next ones pair of bytes to it ( | OR Operator )
-        const opcode = this.memory[this.pc];
-        this.pc++;
+        const args = [];
+        const opcode = this.memory.readByte(this.pc);
         const hexOpcode = opcode.toString(16);
-        //console.log("OPCODE:", hexOpcode);
-
-        switch (opcode) {
-            case 0x00: {
-                //Don't do anything...
-                break;
-            }
-
-            //Increase B
-            case 0x04: {
-                const cycles = 4;
-                for (let i = 0; i < cycles; i++) {
-                    this.B = (this.B + 0x01) & 0xFF;    
-                }    
-                break;
-            }
-
-            //RLCA
-            //Rotate A left. Old bit 7 to Carry flag.
-            case 0x07: {
-
-            }
-
-            case 0x7F: {
-                const cycles = 4;
-
-            }
-        }
+        console.log("OPCODE:", hexOpcode);
+        
+        //Decoding
+        const instruction = this.opcodes[opcode];
+        console.log("instruction", instruction);
+        //Fetch additional
+        if(instruction.inmediate16 != null) args.push(this.memory.readWord(this.pc + 1));
+        else if (instruction.inmediate8 != null) args.push(this.memory.readByte(this.pc + 1));
+        if (instruction.register) args.push(instruction.register);
+        //Exec command
+        const fn = instruction['fn'];
+        fn(args);
+        console.log(args);
+        //Increase pc
+        this.pc += instruction['pc'];
+        //Set flags        
+        this.debugRegisters();
     }
+
+
 
 }
